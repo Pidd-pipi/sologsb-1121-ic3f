@@ -27,6 +27,10 @@ export interface RegenShrub {
   distribution: Distribution;
   browseDamage: BrowseDamage;
   round: number;
+  /** 最后修改时的样地修订号 */
+  rev: number;
+  /** 最后修改时间（毫秒） */
+  updatedAt: number;
 }
 
-export type RegenShrubDraft = Omit<RegenShrub, 'id'>;
+export type RegenShrubDraft = Omit<RegenShrub, 'id' | 'rev' | 'updatedAt'>;

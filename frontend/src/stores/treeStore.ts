@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { db } from '../utils/db';
+import { bumpPlotRevision, clearDeletion, db, recordDeletion, treeBizKey } from '../utils/db';
 import { newId } from '../utils/id';
 import type { TreeRecord, TreeRecordDraft } from '../types/tree';
 
@@ -23,26 +23,45 @@ export const useTreeStore = create<TreeState>((set, get) => ({
     set({ items: rows, loaded: true });
   },
   async add(draft) {
-    const record: TreeRecord = { ...draft, id: newId('tree'), measuredAt: Date.now() };
+    const now = Date.now();
+    const rev = await bumpPlotRevision(draft.plotId);
+    const record: TreeRecord = { ...draft, id: newId('tree'), measuredAt: now, rev, updatedAt: now };
     await db.trees.put(record);
+    await clearDeletion(draft.plotId, treeBizKey(draft.treeNo, draft.round));
     set({ items: [...get().items, record] });
     return record;
   },
   async addMany(drafts) {
+    if (drafts.length === 0) return [];
+    const now = Date.now();
+    const rev = await bumpPlotRevision(drafts[0].plotId);
     const records: TreeRecord[] = drafts.map((d) => ({
       ...d,
       id: newId('tree'),
-      measuredAt: Date.now(),
+      measuredAt: now,
+      rev,
+      updatedAt: now,
     }));
     await db.trees.bulkPut(records);
+    await Promise.all(drafts.map((d) => clearDeletion(d.plotId, treeBizKey(d.treeNo, d.round))));
     set({ items: [...get().items, ...records] });
     return records;
   },
   async update(id, patch) {
-    await db.trees.update(id, patch);
-    set({ items: get().items.map((it) => (it.id === id ? { ...it, ...patch } : it)) });
+    const current = get().items.find((it) => it.id === id);
+    const rev = current ? await bumpPlotRevision(current.plotId) : 1;
+    const now = Date.now();
+    await db.trees.update(id, { ...patch, rev, updatedAt: now });
+    set({
+      items: get().items.map((it) => (it.id === id ? { ...it, ...patch, rev, updatedAt: now } : it)),
+    });
   },
   async remove(id) {
+    const current = get().items.find((it) => it.id === id);
+    if (current) {
+      const rev = await bumpPlotRevision(current.plotId);
+      await recordDeletion(current.plotId, treeBizKey(current.treeNo, current.round), rev);
+    }
     await db.trees.delete(id);
     set({ items: get().items.filter((it) => it.id !== id) });
   },

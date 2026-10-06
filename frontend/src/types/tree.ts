@@ -38,9 +38,13 @@ export interface TreeRecord {
   /** 所属复查期次 */
   round: number;
   measuredAt: number;
+  /** 最后修改时的样地修订号 */
+  rev: number;
+  /** 最后修改时间（毫秒） */
+  updatedAt: number;
 }
 
-export type TreeRecordDraft = Omit<TreeRecord, 'id' | 'measuredAt'>;
+export type TreeRecordDraft = Omit<TreeRecord, 'id' | 'measuredAt' | 'rev' | 'updatedAt'>;
 
 /** 胸径是否异常（相对同树种同径阶偏离过大或数值不合理） */
 export function isDbhAbnormal(tree: TreeRecord, peers: TreeRecord[]): boolean {

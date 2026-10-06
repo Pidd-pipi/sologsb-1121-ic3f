@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { db } from '../utils/db';
+import { bumpPlotRevision, clearDeletion, db, recordDeletion, regenBizKey } from '../utils/db';
 import { newId } from '../utils/id';
 import type { RegenShrub, RegenShrubDraft } from '../types/regen';
 
@@ -22,16 +22,29 @@ export const useRegenStore = create<RegenState>((set, get) => ({
     set({ items: rows, loaded: true });
   },
   async add(draft) {
-    const record: RegenShrub = { ...draft, id: newId('regen') };
+    const now = Date.now();
+    const rev = await bumpPlotRevision(draft.plotId);
+    const record: RegenShrub = { ...draft, id: newId('regen'), rev, updatedAt: now };
     await db.regens.put(record);
+    await clearDeletion(draft.plotId, regenBizKey(draft.layer, draft.species, draft.round));
     set({ items: [...get().items, record] });
     return record;
   },
   async update(id, patch) {
-    await db.regens.update(id, patch);
-    set({ items: get().items.map((it) => (it.id === id ? { ...it, ...patch } : it)) });
+    const current = get().items.find((it) => it.id === id);
+    const rev = current ? await bumpPlotRevision(current.plotId) : 1;
+    const now = Date.now();
+    await db.regens.update(id, { ...patch, rev, updatedAt: now });
+    set({
+      items: get().items.map((it) => (it.id === id ? { ...it, ...patch, rev, updatedAt: now } : it)),
+    });
   },
   async remove(id) {
+    const current = get().items.find((it) => it.id === id);
+    if (current) {
+      const rev = await bumpPlotRevision(current.plotId);
+      await recordDeletion(current.plotId, regenBizKey(current.layer, current.species, current.round), rev);
+    }
     await db.regens.delete(id);
     set({ items: get().items.filter((it) => it.id !== id) });
   },
