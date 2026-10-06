@@ -9,6 +9,7 @@ interface PlotState {
   load: () => Promise<void>;
   add: (draft: PlotDraft) => Promise<Plot>;
   update: (id: string, patch: Partial<Plot>) => Promise<void>;
+  bumpRevision: (plotId: string) => Promise<number>;
   toggleLock: (id: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
 }
@@ -21,7 +22,7 @@ export const usePlotStore = create<PlotState>((set, get) => ({
     set({ items: rows, loaded: true });
   },
   async add(draft) {
-    const record: Plot = { ...draft, id: newId('plot'), createdAt: Date.now() };
+    const record: Plot = { ...draft, id: newId('plot'), revision: 1, createdAt: Date.now() };
     await db.plots.put(record);
     set({ items: [record, ...get().items] });
     return record;
@@ -29,6 +30,13 @@ export const usePlotStore = create<PlotState>((set, get) => ({
   async update(id, patch) {
     await db.plots.update(id, patch);
     set({ items: get().items.map((it) => (it.id === id ? { ...it, ...patch } : it)) });
+  },
+  async bumpRevision(plotId) {
+    const target = get().items.find((it) => it.id === plotId);
+    const next = (target?.revision ?? 0) + 1;
+    await db.plots.update(plotId, { revision: next });
+    set({ items: get().items.map((it) => (it.id === plotId ? { ...it, revision: next } : it)) });
+    return next;
   },
   async toggleLock(id) {
     const target = get().items.find((it) => it.id === id);

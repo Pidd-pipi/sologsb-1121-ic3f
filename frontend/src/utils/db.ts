@@ -6,14 +6,29 @@ import type { RecheckDiff } from '../types/recheck';
 import { newId } from './id';
 
 export const DB_NAME = 'gbforestplot';
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 export const LS_VERSION_KEY = 'gbforestplot:db-version';
+
+/** 每个样地的「最近一次同步基线」快照，用于离线合并的三方比对 */
+export interface SyncBase {
+  /** 即样地 id */
+  plotId: string;
+  /** 基线对应的样地修订号 */
+  revision: number;
+  /** 基线时刻的样木快照 */
+  trees: TreeRecord[];
+  /** 基线时刻的更新苗/灌木快照 */
+  regens: RegenShrub[];
+  /** 基线导出时间 */
+  syncedAt: number;
+}
 
 class ForestPlotDB extends Dexie {
   plots!: Table<Plot, string>;
   trees!: Table<TreeRecord, string>;
   regens!: Table<RegenShrub, string>;
   rechecks!: Table<RecheckDiff, string>;
+  syncbases!: Table<SyncBase, string>;
 
   constructor() {
     super(DB_NAME);
@@ -44,6 +59,36 @@ class ForestPlotDB extends Dexie {
           .modify((row: any) => {
             if (row.round === undefined) row.round = 1;
             if (row.measuredAt === undefined) row.measuredAt = Date.now();
+          });
+      });
+    this.version(3)
+      .stores({
+        plots: 'id, plotNo, locality, forestType, surveyRound, locked, revision, createdAt',
+        trees: 'id, plotId, treeNo, species, round, status, measuredAt, rev',
+        regens: 'id, plotId, layer, species, round, heightCm, rev, updatedAt',
+        rechecks: 'id, plotId, baseRound, targetRound, treeNo, generatedAt',
+        syncbases: 'plotId, revision',
+      })
+      .upgrade(async (tx) => {
+        // 旧数据按新结构升级：补修订号字段
+        await tx
+          .table('plots')
+          .toCollection()
+          .modify((row: any) => {
+            if (row.revision === undefined) row.revision = 1;
+          });
+        await tx
+          .table('trees')
+          .toCollection()
+          .modify((row: any) => {
+            if (row.rev === undefined) row.rev = 1;
+          });
+        await tx
+          .table('regens')
+          .toCollection()
+          .modify((row: any) => {
+            if (row.rev === undefined) row.rev = 1;
+            if (row.updatedAt === undefined) row.updatedAt = Date.now();
           });
       });
   }
@@ -106,6 +151,7 @@ export async function ensureSeedData(): Promise<void> {
       surveyedAt: now - 6 * day,
       crew: '调查一组（顾青、李慕）',
       locked: true,
+      revision: 1,
       createdAt: now - 400 * day,
     },
     {
@@ -126,6 +172,7 @@ export async function ensureSeedData(): Promise<void> {
       surveyedAt: now - 3 * day,
       crew: '调查二组（周砚）',
       locked: false,
+      revision: 1,
       createdAt: now - 120 * day,
     },
   ];
@@ -157,6 +204,7 @@ export async function ensureSeedData(): Promise<void> {
       remark: `样地中部 ${treeNo} 号桩`,
       round: 1,
       measuredAt: now - 370 * day,
+      rev: 1,
     });
   });
   // 第 2 期：树号 1/2/3/5 复测（胸径增大），树号 4 被采伐 → 复查比对可标记缺失
@@ -179,6 +227,7 @@ export async function ensureSeedData(): Promise<void> {
       remark: `样地中部 ${treeNo} 号桩`,
       round: 2,
       measuredAt: now - 6 * day,
+      rev: 1,
     });
   });
   // 第 2 期新增进界木
@@ -198,6 +247,7 @@ export async function ensureSeedData(): Promise<void> {
     remark: '样地东南 3m 进界木',
     round: 2,
     measuredAt: now - 6 * day,
+    rev: 1,
   });
   trees.push({
     id: newId('tree'),
@@ -215,6 +265,7 @@ export async function ensureSeedData(): Promise<void> {
     remark: '样地西侧',
     round: 1,
     measuredAt: now - 3 * day,
+    rev: 1,
   });
 
   const regens: RegenShrub[] = [
@@ -229,6 +280,8 @@ export async function ensureSeedData(): Promise<void> {
       distribution: '团状',
       browseDamage: '轻度',
       round: 2,
+      rev: 1,
+      updatedAt: now,
     },
     {
       id: newId('regen'),
@@ -241,6 +294,8 @@ export async function ensureSeedData(): Promise<void> {
       distribution: '均匀',
       browseDamage: '无',
       round: 2,
+      rev: 1,
+      updatedAt: now,
     },
     {
       id: newId('regen'),
@@ -253,6 +308,8 @@ export async function ensureSeedData(): Promise<void> {
       distribution: '团状',
       browseDamage: '中度',
       round: 2,
+      rev: 1,
+      updatedAt: now,
     },
     {
       id: newId('regen'),
@@ -265,6 +322,8 @@ export async function ensureSeedData(): Promise<void> {
       distribution: '均匀',
       browseDamage: '无',
       round: 2,
+      rev: 1,
+      updatedAt: now,
     },
   ];
 

@@ -33,7 +33,12 @@ export interface Plot {
   crew: string;
   /** 往期数据是否锁定 */
   locked: boolean;
+  /**
+   * 样地修订号：本机每发生一次数据变更（样地/样木/更新苗增删改）即 +1。
+   * 交换包据此判断新旧：包内修订号 < 本机修订号 → 旧包失效。
+   */
+  revision: number;
   createdAt: number;
 }
 
-export type PlotDraft = Omit<Plot, 'id' | 'createdAt'>;
+export type PlotDraft = Omit<Plot, 'id' | 'createdAt' | 'revision'>;

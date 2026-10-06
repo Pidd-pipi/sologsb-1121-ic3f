@@ -27,6 +27,9 @@ export interface RegenShrub {
   distribution: Distribution;
   browseDamage: BrowseDamage;
   round: number;
+  /** 记录修订号：本机每改一次 +1，用于合并时判断「单边改过」 */
+  rev: number;
+  updatedAt: number;
 }
 
-export type RegenShrubDraft = Omit<RegenShrub, 'id'>;
+export type RegenShrubDraft = Omit<RegenShrub, 'id' | 'rev' | 'updatedAt'>;
